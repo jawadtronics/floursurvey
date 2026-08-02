@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f5f7;
+  --foreground: #101828;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Keep a readable light theme regardless of OS preference (dense data tables). */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #f4f5f7;
+    --foreground: #101828;
+  }
+}
+
+/* Keep Leaflet below sticky headers/modals. Height comes from the map div's
+   own utility class (h-64 / h-72 / h-[60vh]) — do NOT force 100% here or the
+   container collapses inside auto-height parents. */
+.leaflet-container {
+  z-index: 0;
+}
