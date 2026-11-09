@@ -19,7 +19,7 @@ import {
 import { ConfirmDialog } from "@/components/Modal";
 import { UserForm, type District, type Zone } from "@/components/UserForm";
 import { ImportUsers } from "@/components/ImportUsers";
-import { fmtDate } from "@/lib/format";
+import { downloadCsv, fmtDate } from "@/lib/format";
 import { ROLE_LABEL, type Profile } from "@/lib/types";
 
 export default function ManageUsersPage() {
@@ -31,6 +31,7 @@ export default function ManageUsersPage() {
   const [loading, setLoading] = useState(true);
 
   const [roleF, setRoleF] = useState("all");
+  const [zoneF, setZoneF] = useState("all");
   const [q, setQ] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
@@ -65,31 +66,59 @@ export default function ManageUsersPage() {
   }
 
   const filtered = users.filter((u) => {
-    if (!["flour_mill", "shopkeeper", "survey"].includes(u.role)) return false;
+    if (!["flour_mill", "shopkeeper", "survey", "visitor"].includes(u.role)) return false;
     if (roleF !== "all" && u.role !== roleF) return false;
+    if (zoneF !== "all" && (u.zone ?? "") !== zoneF) return false;
     if (q && !`${u.full_name} ${u.phone ?? ""} ${u.cnic ?? ""} ${u.shop_name ?? ""}`.toLowerCase().includes(q.toLowerCase()))
       return false;
     return true;
   });
+
+  function exportUsers() {
+    const maps = (u: Profile) =>
+      u.latitude != null && u.longitude != null
+        ? "https://www.google.com/maps?q=" + u.latitude + "," + u.longitude
+        : "";
+    downloadCsv("users_" + new Date().toISOString().slice(0, 10) + ".csv", [
+      ["Name", "Role", "District", "Zone", "Licence / CNIC", "Phone", "Shop name",
+       "Address", "Latitude", "Longitude", "Map link", "Status", "Created", "Created by"],
+      ...filtered.map((u) => [
+        u.full_name, ROLE_LABEL[u.role], u.district ?? "", u.zone ?? "", u.cnic ?? "",
+        u.phone ?? "", u.shop_name ?? "", u.address ?? "",
+        u.latitude ?? "", u.longitude ?? "", maps(u),
+        u.is_active ? "Active" : "Inactive", fmtDate(u.created_at), u.created_by_name ?? "",
+      ]),
+    ]);
+  }
 
   if (loading) return <Spinner />;
 
   return (
     <div>
       <PageHeader title="Manage Users" subtitle={`Flour mills, shopkeepers and survey persons in ${myDistrict || "your district"}.`}>
+        <Button variant="secondary" onClick={exportUsers}>⬇ Export CSV</Button>
         <Button variant="secondary" onClick={() => setImportOpen(true)}>⬆ Import CSV</Button>
         <Button onClick={() => { setEditing(null); setFormOpen(true); }}>+ Register New User</Button>
       </PageHeader>
 
       <Card className="mb-4 p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Search"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name / phone / CNIC / shop" /></Field>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Search"><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name / phone / licence / shop" /></Field>
           <Field label="Role">
             <Select value={roleF} onChange={(e) => setRoleF(e.target.value)}>
               <option value="all">All roles</option>
               <option value="flour_mill">Flour Mill</option>
               <option value="shopkeeper">Shopkeeper</option>
               <option value="survey">Survey Person</option>
+              <option value="visitor">Visitor</option>
+            </Select>
+          </Field>
+          <Field label="Zone">
+            <Select value={zoneF} onChange={(e) => setZoneF(e.target.value)}>
+              <option value="all">All zones</option>
+              {Array.from(new Set(users.map((u) => u.zone).filter(Boolean))).sort().map((z) => (
+                <option key={z as string}>{z}</option>
+              ))}
             </Select>
           </Field>
         </div>
@@ -102,7 +131,7 @@ export default function ManageUsersPage() {
           <TableWrap>
             <thead><tr>
               <Th>Name</Th><Th>Role</Th><Th>District</Th><Th>Zone</Th>
-              <Th>Phone</Th><Th>CNIC</Th><Th>Status</Th><Th>Created</Th><Th></Th>
+              <Th>Phone</Th><Th>Licence / CNIC</Th><Th>Status</Th><Th>Created</Th><Th></Th>
             </tr></thead>
             <tbody>
               {filtered.map((u) => (
@@ -122,10 +151,12 @@ export default function ManageUsersPage() {
                     <div className="flex gap-2">
                       <button onClick={() => { setEditing(u); setFormOpen(true); }}
                         className="text-xs font-medium text-emerald-700 hover:underline">Edit</button>
-                      <button onClick={() => setToToggle(u)}
-                        className="text-xs font-medium text-gray-500 hover:underline">
-                        {u.is_active ? "Deactivate" : "Reactivate"}
-                      </button>
+                      {u.is_active ? (
+                        <button onClick={() => setToToggle(u)}
+                          className="text-xs font-medium text-gray-500 hover:underline">Deactivate</button>
+                      ) : (
+                        <span className="text-xs text-gray-400">Deactivated</span>
+                      )}
                     </div>
                   </Td>
                 </tr>
@@ -140,7 +171,7 @@ export default function ManageUsersPage() {
           districts={districts}
           zones={zones}
           editing={editing}
-          allowedRoles={["flour_mill", "shopkeeper", "survey"]}
+          allowedRoles={["flour_mill", "shopkeeper", "survey", "visitor"]}
           lockedDistrict={myDistrict}
           onClose={() => setFormOpen(false)}
           onSaved={() => { setFormOpen(false); load(); }}

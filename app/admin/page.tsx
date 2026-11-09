@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageHeader, Card } from "@/components/ui";
-import { Analytics } from "@/components/analytics";
+import { Dashboard } from "@/components/Dashboard";
 
 export default function AdminHome() {
   return (
@@ -10,9 +10,7 @@ export default function AdminHome() {
         subtitle="Whole-system control — people, districts, zones and analytics everywhere."
       />
 
-      <div className="mb-8">
-        <Analytics show={["district", "zone", "surveyor"]} />
-      </div>
+      <Dashboard show={["district", "zone", "surveyor"]} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <ActionCard href="/admin/users" emoji="👥" title="Users"

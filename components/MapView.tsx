@@ -49,7 +49,7 @@ export function MapView({
       const latlngs: [number, number][] = [];
       for (const p of valid) {
         const m = L.marker([p.lat, p.lng], { icon }).addTo(map);
-        const dir = `https://www.openstreetmap.org/directions?to=${p.lat},${p.lng}`;
+        const dir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
         m.bindPopup(
           `<div style="min-width:150px">
              <strong>${escapeHtml(p.title)}</strong><br/>

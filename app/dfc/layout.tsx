@@ -14,6 +14,8 @@ export default async function DfcLayout({
         links={[
           { href: "/dfc", label: "Home" },
           { href: "/dfc/users", label: "Manage Users" },
+          { href: "/dfc/quotas", label: "Mill Quotas" },
+          { href: "/dfc/advances", label: "Expected Advances" },
           { href: "/dfc/history", label: "View History" },
         ]}
       />

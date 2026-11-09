@@ -12,7 +12,8 @@ export default async function MillLayout({
       <Nav
         profile={profile}
         links={[
-          { href: "/mill", label: "Issue Wheat" },
+          { href: "/mill", label: "Issue Flour" },
+          { href: "/mill/advance", label: "Expected Advance" },
           { href: "/mill/history", label: "History" },
         ]}
       />

@@ -13,6 +13,8 @@ export default async function SupervisorLayout({
         profile={profile}
         links={[
           { href: "/supervisor", label: "Overview" },
+          { href: "/supervisor/quotas", label: "Mill Quotas" },
+          { href: "/supervisor/advances", label: "Expected Advances" },
           { href: "/supervisor/users", label: "Users" },
         ]}
       />

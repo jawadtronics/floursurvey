@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { MapView, type MapPin } from "@/components/MapView";
+import { PhotoCapture, type Photo } from "@/components/PhotoCapture";
 import { ageSince } from "@/lib/format";
 import type { PendingShop } from "@/lib/types";
 
@@ -116,7 +117,7 @@ export default function SurveyPendingPage() {
               <div className="mt-4 flex gap-2">
                 {s.latitude != null && s.longitude != null && (
                   <a
-                    href={`https://www.openstreetmap.org/directions?to=${s.latitude},${s.longitude}`}
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${s.latitude},${s.longitude}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
@@ -160,6 +161,7 @@ function SurveyForm({
   const [b15, setB15] = useState("");
   const [b20, setB20] = useState("");
   const [notes, setNotes] = useState("");
+  const [photo, setPhoto] = useState<Photo | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -169,6 +171,7 @@ function SurveyForm({
     setB15("");
     setB20("");
     setNotes("");
+    setPhoto(null);
     setConfirm(false);
     setErr(null);
   }, [shop]);
@@ -185,6 +188,9 @@ function SurveyForm({
       p_b15: Number(b15) || 0,
       p_b20: Number(b20) || 0,
       p_notes: notes || null,
+      p_photo_url: photo?.url ?? null,
+      p_photo_lat: photo?.lat ?? null,
+      p_photo_lng: photo?.lng ?? null,
     });
     setSaving(false);
     if (error) {
@@ -217,6 +223,9 @@ function SurveyForm({
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
       </div>
+      <div className="mt-3">
+        <PhotoCapture folder="surveys" value={photo} onChange={setPhoto} label="Visit photo" allowGallery />
+      </div>
       {err && (
         <div className="mt-3">
           <Alert tone="error">{err}</Alert>
@@ -228,7 +237,7 @@ function SurveyForm({
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => setConfirm(true)}>Submit ({total} bags)</Button>
+          <Button onClick={() => setConfirm(true)} disabled={!photo}>Submit ({total} bags)</Button>
         </div>
       ) : (
         <div className="mt-5 rounded-lg bg-gray-50 p-4">

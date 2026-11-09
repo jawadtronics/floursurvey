@@ -7,7 +7,7 @@ import { Modal } from "@/components/Modal";
 import { downloadCsv } from "@/lib/format";
 import type { Zone } from "@/components/UserForm";
 
-type ImportType = "shopkeeper" | "flour_mill";
+type ImportType = "shopkeeper" | "flour_mill" | "survey";
 type Row = Record<string, string>;
 interface Result { email: string; ok: boolean; error?: string }
 
@@ -72,6 +72,13 @@ export function ImportUsers({
   const exampleZone = zoneNames[0] ?? "Zone A";
 
   function downloadSample() {
+    if (type === "survey") {
+      downloadCsv("survey_persons_sample.csv", [
+        ["full_name", "email", "password", "cnic", "phone", "zone"],
+        ["New Surveyor", "surveyor@example.pk", "Password123", "3520255555551", "03005555555", exampleZone],
+      ]);
+      return;
+    }
     if (type === "flour_mill") {
       downloadCsv("flour_mills_sample.csv", [
         ["full_name", "email", "password", "cnic", "phone"],
@@ -79,8 +86,8 @@ export function ImportUsers({
       ]);
     } else {
       downloadCsv("shopkeepers_sample.csv", [
-        ["full_name", "email", "password", "cnic", "phone", "shop_name", "zone", "latitude", "longitude"],
-        ["Ali Traders", "ali@example.pk", "Password123", "3520212345671", "03001234567", "Ali Kiryana Store", exampleZone, "31.5204", "74.3587"],
+        ["full_name", "licence_number", "phone", "shop_name", "address", "zone", "latitude", "longitude"],
+        ["Ali Traders", "LIC-4471-A", "03001234567", "Ali Kiryana Store", "Shop 12, Main Boulevard", exampleZone, "31.5204", "74.3587"],
       ]);
     }
   }
@@ -106,13 +113,22 @@ export function ImportUsers({
     const out: Result[] = [];
     for (const r of rows) {
       const payload =
-        type === "shopkeeper"
+        type === "survey"
           ? {
-              p_email: r.email, p_password: r.password, p_full_name: r.full_name, p_role: "shopkeeper",
+              p_email: r.email, p_password: r.password, p_full_name: r.full_name, p_role: "survey",
               p_district: districtLocked, p_zone: r.zone, p_cnic: r.cnic, p_phone: r.phone,
+              p_shop_name: null, p_latitude: null, p_longitude: null,
+            }
+          : type === "shopkeeper"
+          ? {
+              p_email: null, p_password: null, p_full_name: r.full_name, p_role: "shopkeeper",
+              p_district: districtLocked, p_zone: r.zone,
+              // shopkeepers use a licence number; older files may still say cnic
+              p_cnic: r.licence_number || r.cnic, p_phone: r.phone,
               p_shop_name: r.shop_name,
               p_latitude: r.latitude ? Number(r.latitude) : null,
               p_longitude: r.longitude ? Number(r.longitude) : null,
+              p_address: r.address || null,
             }
           : {
               p_email: r.email, p_password: r.password, p_full_name: r.full_name, p_role: "flour_mill",
@@ -120,7 +136,7 @@ export function ImportUsers({
               p_shop_name: null, p_latitude: null, p_longitude: null,
             };
       const { error } = await supabase.rpc("admin_create_user", payload);
-      out.push({ email: r.email || "(no email)", ok: !error, error: error?.message });
+      out.push({ email: r.full_name || r.email || "(unnamed)", ok: !error, error: error?.message });
     }
     setResults(out);
     setImporting(false);
@@ -135,7 +151,7 @@ export function ImportUsers({
       <div className="space-y-4">
         {/* type toggle */}
         <div className="flex rounded-lg border border-gray-300 p-0.5">
-          {(["shopkeeper", "flour_mill"] as ImportType[]).map((t) => (
+          {(["shopkeeper", "flour_mill", "survey"] as ImportType[]).map((t) => (
             <button
               key={t}
               onClick={() => { setType(t); setRows([]); setResults(null); setFileName(""); }}
@@ -144,7 +160,7 @@ export function ImportUsers({
                 (type === t ? "bg-emerald-600 text-white" : "text-gray-600")
               }
             >
-              {t === "shopkeeper" ? "Shopkeepers" : "Flour Mills"}
+              {t === "shopkeeper" ? "Shopkeepers" : t === "flour_mill" ? "Flour Mills" : "Survey Persons"}
             </button>
           ))}
         </div>
@@ -152,11 +168,13 @@ export function ImportUsers({
         <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
           <div className="mb-2 font-medium text-gray-800">How it works</div>
           <ol className="list-inside list-decimal space-y-1">
-            <li>Download the sample CSV and fill one row per {type === "shopkeeper" ? "shopkeeper" : "flour mill"}.</li>
+            <li>Download the sample CSV and fill one row per {type === "shopkeeper" ? "shopkeeper" : type === "flour_mill" ? "flour mill" : "survey person"}.</li>
             <li>Every user is created in your district, <strong>{districtLocked}</strong>.</li>
-            {type === "shopkeeper" && (
+            {(type === "shopkeeper" || type === "survey") && (
               <li>The <code>zone</code> must be one of: {zoneNames.length ? zoneNames.join(", ") : "(no zones yet — ask the Super Admin)"}.</li>
             )}
+            {type === "survey" && <li>Survey persons sign in, so each needs an <code>email</code> and <code>password</code> (8+ chars, letter + number).</li>}
+            {type === "shopkeeper" && <li>Shopkeepers don&apos;t sign in, so no email or password is needed.</li>}
             <li>Upload the file below and press Import.</li>
           </ol>
           <div className="mt-3">
@@ -183,17 +201,22 @@ export function ImportUsers({
           <Card>
             <TableWrap>
               <thead><tr>
-                <Th>Name</Th><Th>Email</Th>
-                {type === "shopkeeper" ? <><Th>Shop</Th><Th>Zone</Th></> : <><Th>CNIC</Th><Th>Phone</Th></>}
+                <Th>Name</Th>
+                {type === "shopkeeper"
+                  ? <><Th>Shop</Th><Th>Zone</Th><Th>Phone</Th></>
+                  : type === "survey"
+                  ? <><Th>Email</Th><Th>Zone</Th><Th>Phone</Th></>
+                  : <><Th>Email</Th><Th>CNIC</Th><Th>Phone</Th></>}
               </tr></thead>
               <tbody>
                 {rows.slice(0, 8).map((r, i) => (
                   <tr key={i}>
                     <Td className="font-medium">{r.full_name}</Td>
-                    <Td>{r.email}</Td>
                     {type === "shopkeeper"
-                      ? <><Td>{r.shop_name}</Td><Td>{r.zone}</Td></>
-                      : <><Td>{r.cnic}</Td><Td>{r.phone}</Td></>}
+                      ? <><Td>{r.shop_name}</Td><Td>{r.zone}</Td><Td>{r.phone}</Td></>
+                      : type === "survey"
+                      ? <><Td>{r.email}</Td><Td>{r.zone}</Td><Td>{r.phone}</Td></>
+                      : <><Td>{r.email}</Td><Td>{r.cnic}</Td><Td>{r.phone}</Td></>}
                   </tr>
                 ))}
               </tbody>
@@ -210,7 +233,7 @@ export function ImportUsers({
             {failed > 0 && (
               <Card className="mt-3">
                 <TableWrap>
-                  <thead><tr><Th>Email</Th><Th>Result</Th></tr></thead>
+                  <thead><tr><Th>User</Th><Th>Result</Th></tr></thead>
                   <tbody>
                     {results.map((r, i) => (
                       <tr key={i}>

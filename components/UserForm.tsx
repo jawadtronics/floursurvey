@@ -1,11 +1,51 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { MapPicker } from "@/components/MapPicker";
-import { ROLE_LABEL, type Profile, type Role } from "@/lib/types";
+import { fmtDateTime } from "@/lib/format";
+import { ROLE_LABEL, type Profile, type ProfileNote, type Role } from "@/lib/types";
+
+/** Zone / district transfer history for a survey person. */
+function TransferNotes({ profileId }: { profileId: string }) {
+  const supabase = useMemo(() => createClient(), []);
+  const [notes, setNotes] = useState<ProfileNote[] | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("v_profile_notes")
+        .select("*")
+        .eq("profile_id", profileId)
+        .order("created_at", { ascending: false });
+      setNotes((data as ProfileNote[]) ?? []);
+    })();
+  }, [supabase, profileId]);
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <div className="mb-2 text-sm font-medium text-gray-800">Transfer history</div>
+      {notes === null ? (
+        <p className="text-xs text-gray-400">Loading…</p>
+      ) : notes.length === 0 ? (
+        <p className="text-xs text-gray-400">No transfers recorded yet.</p>
+      ) : (
+        <ul className="max-h-40 space-y-2 overflow-y-auto">
+          {notes.map((n) => (
+            <li key={n.id} className="rounded bg-white px-3 py-2 text-xs">
+              <div className="text-gray-800">{n.note}</div>
+              <div className="mt-0.5 text-[11px] text-gray-400">
+                {fmtDateTime(n.created_at)}
+                {n.created_by_name && ` · by ${n.created_by_name}`}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export interface Zone {
   id: string;
@@ -49,15 +89,25 @@ export function UserForm({
   const [cnic, setCnic] = useState(editing?.cnic ?? "");
   const [phone, setPhone] = useState(editing?.phone ?? "");
   const [shopName, setShopName] = useState(editing?.shop_name ?? "");
+  const [address, setAddress] = useState(editing?.address ?? "");
   const [lat, setLat] = useState<number | null>(editing?.latitude ?? null);
   const [lng, setLng] = useState<number | null>(editing?.longitude ?? null);
+  const [canReactivate, setCanReactivate] = useState<boolean>(editing?.can_reactivate ?? false);
+  const [supDistricts, setSupDistricts] = useState<string[]>(editing?.supervision_districts ?? []);
+  const [visitorAnyDate, setVisitorAnyDate] = useState<boolean>(editing?.visitor_any_date ?? false);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const isShop = role === "shopkeeper";
+  const isSupervisor = role === "supervisor";
+  const isVisitor = role === "visitor";
+  // Shopkeepers have no dashboard, so they get no sign-in credentials.
+  const needsLogin = !isShop;
   const isField = role === "flour_mill" || role === "shopkeeper" || role === "survey";
   const needsZone = role === "shopkeeper" || role === "survey";
   const needsDistrict = isField || role === "dfc";
+  // A DFC-created visitor is locked to the DFC's district; a super-admin visitor picks many.
+  const visitorDistricts = isVisitor ? (lockedDistrict ? [lockedDistrict] : supDistricts) : [];
 
   const effDistrict = lockedDistrict ?? district;
   const zoneOptions = zones.filter(
@@ -69,7 +119,7 @@ export function UserForm({
     const hasLetter = (s: string) => [...s].some((c) => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z"));
     const hasDigit = (s: string) => [...s].some((c) => c >= "0" && c <= "9");
     if (fullName.trim().length < 3) return "Full name must be at least 3 characters.";
-    if (!isEdit) {
+    if (!isEdit && needsLogin) {
       const at = email.indexOf("@");
       if (at <= 0 || email.indexOf(".", at) < 0 || email.includes(" ")) return "Enter a valid email.";
       if (password.length < 8 || !hasLetter(password) || !hasDigit(password))
@@ -79,7 +129,12 @@ export function UserForm({
     if (needsDistrict && !effDistrict) return "District is required.";
     if (needsZone && !zone) return "Zone is required.";
     if (isField) {
-      if (cnic.length !== 13 || !isDigits(cnic)) return "CNIC must be exactly 13 digits.";
+      if (isShop) {
+        // Licence numbers are alphanumeric and vary in length.
+        if (cnic.trim().length < 3) return "Licence number must be at least 3 characters.";
+      } else if (cnic.length !== 13 || !isDigits(cnic)) {
+        return "CNIC must be exactly 13 digits.";
+      }
       if (phone.length !== 11 || !phone.startsWith("03") || !isDigits(phone))
         return "Phone must be a valid PK mobile (03XXXXXXXXX).";
     }
@@ -90,6 +145,10 @@ export function UserForm({
       if (lat < 23.6 || lat > 37.1 || lng < 60.9 || lng > 77.8)
         return "Coordinates look outside Pakistan — check the pin.";
     }
+    if (isSupervisor && supDistricts.length === 0)
+      return "Select at least one supervision district.";
+    if (isVisitor && visitorDistricts.length === 0)
+      return "Select at least one district for the visitor.";
     return null;
   }
 
@@ -106,22 +165,30 @@ export function UserForm({
       p_shop_name: isShop ? shopName.trim() : null,
       p_latitude: isShop ? lat : null,
       p_longitude: isShop ? lng : null,
+      p_address: isShop ? (address.trim() || null) : null,
+      p_can_reactivate: isSupervisor ? canReactivate : false,
+      p_supervision_districts: isSupervisor ? supDistricts : isVisitor ? visitorDistricts : null,
     };
+    // Only visitors carry this newer param, so create/edit of every other role
+    // still matches the existing DB function signature.
+    const visitorExtra = isVisitor ? { p_visitor_any_date: visitorAnyDate } : {};
     if (isEdit) {
       const { error } = await supabase.rpc("admin_update_user", {
         p_id: editing!.id,
         p_full_name: fullName.trim(),
         ...common,
+        ...visitorExtra,
       });
       setSaving(false);
       if (error) { setErr(error.message); return; }
     } else {
       const { error } = await supabase.rpc("admin_create_user", {
-        p_email: email.trim().toLowerCase(),
-        p_password: password,
+        p_email: needsLogin ? email.trim().toLowerCase() : null,
+        p_password: needsLogin ? password : null,
         p_full_name: fullName.trim(),
         p_role: role,
         ...common,
+        ...visitorExtra,
       });
       setSaving(false);
       if (error) { setErr(error.message); return; }
@@ -153,7 +220,7 @@ export function UserForm({
           )}
         </div>
 
-        {!isEdit && (
+        {!isEdit && needsLogin && (
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Email" required>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -164,6 +231,12 @@ export function UserForm({
             <Field label="Confirm Password" required>
               <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             </Field>
+          </div>
+        )}
+
+        {!isEdit && isShop && (
+          <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500">
+            Shopkeepers don&apos;t sign in — deliveries are auto-received — so no email or password is needed.
           </div>
         )}
 
@@ -192,12 +265,136 @@ export function UserForm({
 
         {isField && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="CNIC" required hint="13 digits">
-              <Input value={cnic} onChange={(e) => setCnic(onlyDigits(e.target.value).slice(0, 13))} />
+            <Field
+              label={isShop ? "Licence Number" : "CNIC"}
+              required
+              hint={isShop ? "Letters and numbers, any length" : "13 digits"}
+            >
+              <Input
+                value={cnic}
+                onChange={(e) =>
+                  setCnic(isShop ? e.target.value.trimStart() : onlyDigits(e.target.value).slice(0, 13))
+                }
+              />
             </Field>
             <Field label="Phone" required hint="03XXXXXXXXX">
               <Input value={phone} onChange={(e) => setPhone(onlyDigits(e.target.value).slice(0, 11))} />
             </Field>
+          </div>
+        )}
+
+        {isShop && (
+          <Field label="Address" hint="Street / area of the shop">
+            <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. Shop 12, Main Boulevard, Model Town" />
+          </Field>
+        )}
+
+        {isSupervisor && (
+          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300"
+                checked={canReactivate}
+                onChange={(e) => setCanReactivate(e.target.checked)}
+              />
+              Allow Re-Activation
+            </label>
+            <p className="-mt-1 pl-6 text-xs text-gray-500">
+              Lets this supervisor re-activate users a DFC has deactivated (within their districts).
+            </p>
+            <div>
+              <span className="mb-1 block text-sm font-medium text-gray-700">
+                Supervision Districts <span className="text-red-500">*</span>
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {districts.map((d) => {
+                  const on = supDistricts.includes(d.name);
+                  return (
+                    <label
+                      key={d.id}
+                      className={
+                        "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm " +
+                        (on ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-300 bg-white text-gray-700")
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5"
+                        checked={on}
+                        onChange={(e) =>
+                          setSupDistricts((prev) =>
+                            e.target.checked ? [...prev, d.name] : prev.filter((x) => x !== d.name)
+                          )
+                        }
+                      />
+                      {d.name}
+                    </label>
+                  );
+                })}
+                {districts.length === 0 && <span className="text-sm text-gray-400">No districts yet.</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isVisitor && (
+          <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div>
+              <span className="mb-1 block text-sm font-medium text-gray-700">
+                District access <span className="text-red-500">*</span>
+              </span>
+              {lockedDistrict ? (
+                <div className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700">
+                  {lockedDistrict}
+                  <span className="ml-2 text-xs text-gray-400">(your district)</span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {districts.map((d) => {
+                    const on = supDistricts.includes(d.name);
+                    return (
+                      <label
+                        key={d.id}
+                        className={
+                          "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm " +
+                          (on ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-300 bg-white text-gray-700")
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5"
+                          checked={on}
+                          onChange={(e) =>
+                            setSupDistricts((prev) =>
+                              e.target.checked ? [...prev, d.name] : prev.filter((x) => x !== d.name)
+                            )
+                          }
+                        />
+                        {d.name}
+                      </label>
+                    );
+                  })}
+                  {districts.length === 0 && <span className="text-sm text-gray-400">No districts yet.</span>}
+                </div>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                The visitor can only see Expected Advances for {lockedDistrict ? "this district" : "the chosen districts"}.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-800">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300"
+                checked={visitorAnyDate}
+                onChange={(e) => setVisitorAnyDate(e.target.checked)}
+              />
+              Can view any date
+            </label>
+            <p className="-mt-1 pl-6 text-xs text-gray-500">
+              When on, the visitor gets a date filter. When off, they only see the current day&apos;s advances.
+            </p>
           </div>
         )}
 
@@ -219,6 +416,8 @@ export function UserForm({
             </div>
           </div>
         )}
+
+        {isEdit && editing?.role === "survey" && <TransferNotes profileId={editing.id} />}
 
         {err && <Alert tone="error">{err}</Alert>}
 

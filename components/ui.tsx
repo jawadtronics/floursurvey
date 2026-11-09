@@ -294,3 +294,30 @@ export function Alert({
     </div>
   );
 }
+
+/* --------------------------- Geo photo thumb --------------------------- */
+export function PhotoThumb({
+  url,
+  lat,
+  lng,
+}: {
+  url: string | null;
+  lat: number | null;
+  lng: number | null;
+}) {
+  if (!url) return <span className="text-xs text-gray-400">—</span>;
+  const maps = lat != null && lng != null ? `https://www.google.com/maps?q=${lat},${lng}` : null;
+  return (
+    <div className="flex items-center gap-1.5">
+      <a href={url} target="_blank" rel="noopener noreferrer" title="Open photo">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="proof" className="h-9 w-9 rounded border border-gray-200 object-cover" />
+      </a>
+      {maps && (
+        <a href={maps} target="_blank" rel="noopener noreferrer" title="Photo location" className="text-xs text-blue-600 hover:underline">
+          📍
+        </a>
+      )}
+    </div>
+  );
+}

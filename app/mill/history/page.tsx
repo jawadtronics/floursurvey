@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/fetchAll";
 import {
   Badge,
   Card,
   EmptyState,
   PageHeader,
+  PhotoThumb,
   Spinner,
   StatusBadge,
   Td,
@@ -21,6 +23,9 @@ interface Group {
   track_number: string;
   issue_date: string;
   vehicle_number: string | null;
+  photo_url: string | null;
+  photo_lat: number | null;
+  photo_lng: number | null;
   lines: EffectiveLine[];
   total: number;
   received: number;
@@ -36,11 +41,8 @@ export default function MillHistoryPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("v_issue_lines_effective")
-        .select("*")
-        .order("issue_date", { ascending: false });
-      const lines = (data as EffectiveLine[]) ?? [];
+      const lines = await fetchAll<EffectiveLine>(supabase, "v_issue_lines_effective", ["id"]);
+      lines.sort((a, b) => (a.issue_date < b.issue_date ? 1 : a.issue_date > b.issue_date ? -1 : 0));
       const map = new Map<string, Group>();
       for (const l of lines) {
         let g = map.get(l.issue_id);
@@ -50,6 +52,9 @@ export default function MillHistoryPage() {
             track_number: l.track_number,
             issue_date: l.issue_date,
             vehicle_number: l.vehicle_number,
+            photo_url: l.issue_photo_url,
+            photo_lat: l.issue_photo_lat,
+            photo_lng: l.issue_photo_lng,
             lines: [],
             total: 0,
             received: 0,
@@ -85,8 +90,8 @@ export default function MillHistoryPage() {
             <thead>
               <tr>
                 <Th>Date</Th>
-                <Th>Track No</Th>
-                <Th>Vehicle</Th>
+                <Th>Truck No</Th>
+                <Th>Photo</Th>
                 <Th className="text-right">Shopkeepers</Th>
                 <Th className="text-right">Total Bags</Th>
                 <Th>Acknowledgement</Th>
@@ -99,7 +104,7 @@ export default function MillHistoryPage() {
                   <tr key={g.issue_id} className="hover:bg-gray-50">
                     <Td>{fmtDate(g.issue_date)}</Td>
                     <Td className="font-medium">{g.track_number}</Td>
-                    <Td className="text-gray-500">{g.vehicle_number ?? "—"}</Td>
+                    <Td><PhotoThumb url={g.photo_url} lat={g.photo_lat} lng={g.photo_lng} /></Td>
                     <Td className="text-right">{g.lines.length}</Td>
                     <Td className="text-right font-semibold">{g.total}</Td>
                     <Td>

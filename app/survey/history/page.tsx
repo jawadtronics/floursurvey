@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAll } from "@/lib/fetchAll";
 import {
   Card,
   EmptyState,
   PageHeader,
+  PhotoThumb,
   Spinner,
   Td,
   Th,
@@ -21,11 +23,9 @@ export default function SurveyHistoryPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("v_surveys_visible")
-        .select("*")
-        .order("created_at", { ascending: false });
-      setRows((data as SurveyRow[]) ?? []);
+      const all = await fetchAll<SurveyRow>(supabase, "v_surveys_visible", ["id"]);
+      all.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+      setRows(all);
       setLoading(false);
     })();
   }, [supabase]);
@@ -52,6 +52,7 @@ export default function SurveyHistoryPage() {
                 <Th className="text-right">20kg</Th>
                 <Th className="text-right">Total Bags</Th>
                 <Th>Notes</Th>
+                <Th>Photo</Th>
               </tr>
             </thead>
             <tbody>
@@ -71,6 +72,7 @@ export default function SurveyHistoryPage() {
                   <Td className="max-w-xs whitespace-normal text-gray-500">
                     {r.notes ?? "—"}
                   </Td>
+                  <Td><PhotoThumb url={r.survey_photo_url} lat={r.survey_photo_lat} lng={r.survey_photo_lng} /></Td>
                 </tr>
               ))}
             </tbody>

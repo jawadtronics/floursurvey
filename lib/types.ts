@@ -4,7 +4,8 @@ export type Role =
   | "dfc"
   | "flour_mill"
   | "shopkeeper"
-  | "survey";
+  | "survey"
+  | "visitor";
 
 export type LineStatus = "issued" | "received" | "not_received";
 
@@ -13,8 +14,9 @@ export const ROLE_HOME: Record<Role, string> = {
   dfc: "/dfc",
   supervisor: "/supervisor",
   flour_mill: "/mill",
-  shopkeeper: "/shop",
+  shopkeeper: "/login", // shopkeepers have no dashboard — deliveries are auto-received
   survey: "/survey",
+  visitor: "/visitor",
 };
 
 export const ROLE_LABEL: Record<Role, string> = {
@@ -24,6 +26,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   flour_mill: "Flour Mill",
   shopkeeper: "Shopkeeper",
   survey: "Survey Person",
+  visitor: "Visitor",
 };
 
 export interface Notice {
@@ -54,9 +57,13 @@ export interface Profile {
   shop_name: string | null;
   latitude: number | null;
   longitude: number | null;
+  address: string | null;
   is_active: boolean;
   created_at: string;
   created_by_name?: string | null;
+  can_reactivate?: boolean;
+  supervision_districts?: string[] | null;
+  visitor_any_date?: boolean;
 }
 
 export interface EffectiveLine {
@@ -84,6 +91,11 @@ export interface EffectiveLine {
   shopkeeper_phone: string | null;
   deadline: string;
   effective_status: LineStatus;
+  shop_latitude: number | null;
+  shop_longitude: number | null;
+  issue_photo_url: string | null;
+  issue_photo_lat: number | null;
+  issue_photo_lng: number | null;
 }
 
 export interface PendingShop {
@@ -111,6 +123,12 @@ export interface ReconRow {
   declared_bags: number;
   variance_bags: number;
   abs_variance_bags: number;
+  shop_latitude: number | null;
+  shop_longitude: number | null;
+  survey_photo_url: string | null;
+  survey_photo_lat: number | null;
+  survey_photo_lng: number | null;
+  source: "survey" | "dfc";
 }
 
 export interface SurveyRow {
@@ -127,6 +145,124 @@ export interface SurveyRow {
   shopkeeper_id: string;
   shopkeeper_name: string;
   shop_name: string | null;
+  shop_latitude: number | null;
+  shop_longitude: number | null;
+  survey_photo_url: string | null;
+  survey_photo_lat: number | null;
+  survey_photo_lng: number | null;
+  source: "survey" | "dfc";
+}
+
+export interface MissedSurvey {
+  shopkeeper_id: string;
+  shopkeeper_name: string;
+  shop_name: string | null;
+  zone: string | null;
+  district: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  missed_lines: number;
+  oldest_issue_date: string;
+  missed_bags: number;
+  surveyor_name: string | null;
+}
+
+export interface LedgerRow {
+  line_id: string;
+  issued_at: string;
+  issue_date: string;
+  track_number: string;
+  shopkeeper_id: string;
+  shopkeeper_name: string;
+  shop_name: string | null;
+  zone: string | null;
+  district: string | null;
+  shop_latitude: number | null;
+  shop_longitude: number | null;
+  mill_name: string;
+  flour_mill_id: string;
+  survey_person_name: string | null;
+  survey_id: string | null;
+  survey_source: "survey" | "dfc" | null;
+  disp_10: number; disp_15: number; disp_20: number; disp_total: number;
+  rec_10: number | null; rec_15: number | null; rec_20: number | null; rec_total: number | null;
+  survey_line_count: number | null;
+  var_10: number | null; var_15: number | null; var_20: number | null;
+  issue_photo_url: string | null; issue_photo_lat: number | null; issue_photo_lng: number | null;
+  survey_photo_url: string | null; survey_photo_lat: number | null; survey_photo_lng: number | null;
+  status: "surveyed" | "pending" | "missed";
+  dispute_kind: "variance" | "not_received";
+  dispute_ref: string;
+  dispute_status: "open" | "resolved" | null;
+}
+
+export interface SurveyorStat {
+  survey_person_id: string;
+  survey_person_name: string;
+  zone: string | null;
+  district: string | null;
+  /** Delivery lines in this surveyor's zone that needed a visit in the window. */
+  assigned_surveys: number;
+  /** How many of those were actually surveyed. Always <= assigned_surveys. */
+  visited_surveys: number;
+  surveys_submitted: number;
+}
+
+export interface SurveyorShop {
+  shopkeeper_id: string;
+  shopkeeper_name: string;
+  shop_name: string | null;
+  zone: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  deliveries: number;
+  surveyed_deliveries: number;
+  issued_bags: number;
+  visited: boolean;
+  surveys_count: number;
+  last_survey_at: string | null;
+  declared_bags: number;
+}
+
+export interface AdvanceRow {
+  advance_id: string;
+  supply_date: string;
+  district: string | null;
+  flour_mill_id: string;
+  mill_name: string;
+  shopkeeper_id: string;
+  shopkeeper_name: string;
+  shop_name: string | null;
+  zone: string | null;
+  phone: string | null;
+  shop_address: string | null;
+  shop_latitude: number | null;
+  shop_longitude: number | null;
+  bags_10: number; bags_15: number; bags_20: number; total_bags: number;
+  issued_10: number; issued_15: number; issued_20: number; issued_bags: number;
+  var_10: number; var_15: number; var_20: number;
+}
+
+export interface ProfileNote {
+  id: string;
+  profile_id: string;
+  note: string;
+  kind: string;
+  created_at: string;
+  created_by_name: string | null;
+}
+
+export interface MillQuota {
+  mill_id: string;
+  mill_name: string;
+  district: string | null;
+  target_date: string;
+  regular_quota: number;
+  pending_quota: number;
+  kpk_quota: number;
+  total_quota: number;
+  issued_today: number;
+  has_quota: boolean;
 }
 
 // Variance flagging (Q14): serious if > 5 bags OR > 10% of received.

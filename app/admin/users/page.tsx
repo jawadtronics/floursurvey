@@ -21,7 +21,7 @@ import { UserForm, type District, type Zone } from "@/components/UserForm";
 import { fmtDate } from "@/lib/format";
 import { ROLE_LABEL, type Profile, type Role } from "@/lib/types";
 
-const ALL_ROLES: Role[] = ["super_admin", "supervisor", "dfc", "flour_mill", "shopkeeper", "survey"];
+const ALL_ROLES: Role[] = ["super_admin", "supervisor", "dfc", "flour_mill", "shopkeeper", "survey", "visitor"];
 
 export default function AdminUsersPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -130,7 +130,7 @@ export default function AdminUsersPage() {
           districts={districts}
           zones={zones}
           editing={editing}
-          allowedRoles={["dfc", "supervisor", "super_admin", "flour_mill", "shopkeeper", "survey"]}
+          allowedRoles={["dfc", "supervisor", "super_admin", "flour_mill", "shopkeeper", "survey", "visitor"]}
           onClose={() => setFormOpen(false)}
           onSaved={() => { setFormOpen(false); load(); }}
         />

@@ -1,20 +1,17 @@
 import { requireRole } from "@/lib/auth";
 import { Nav, Shell } from "@/components/Nav";
 
-export default async function ShopLayout({
+export default async function VisitorLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const profile = await requireRole(["shopkeeper"]);
+  const profile = await requireRole(["visitor"]);
   return (
     <>
       <Nav
         profile={profile}
-        links={[
-          { href: "/shop", label: "Incoming" },
-          { href: "/shop/history", label: "History" },
-        ]}
+        links={[{ href: "/visitor", label: "Expected Advances" }]}
       />
       <Shell>{children}</Shell>
     </>
