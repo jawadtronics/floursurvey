@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/components/ui";
+import { Emblem } from "@/components/Brand";
 import { ROLE_LABEL, zoneList, type Profile } from "@/lib/types";
 
 export interface NavLink {
@@ -38,9 +39,7 @@ export function Nav({
     <header className="sticky top-0 z-20 border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white">
-            🌾
-          </span>
+          <Emblem size={40} />
           <span className="hidden font-semibold text-gray-900 sm:inline">
             Flour Distribution
           </span>

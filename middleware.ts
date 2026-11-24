@@ -41,5 +41,10 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Static files in public/ must be excluded too, not just _next. Without the
+  // extension rule, a signed-out visitor asking for an image got redirected to
+  // /login, which broke the emblem on the sign-in page itself.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*[.](?:png|jpg|jpeg|gif|webp|avif|svg|ico|txt|xml|webmanifest|woff|woff2|ttf)$).*)",
+  ],
 };
