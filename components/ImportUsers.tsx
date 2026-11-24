@@ -71,11 +71,22 @@ export function ImportUsers({
   const zoneNames = zones.map((z) => z.name);
   const exampleZone = zoneNames[0] ?? "Zone A";
 
+  /** A survey person may cover several zones, written in one cell and
+   *  separated by "|" (or ";" / "/"). One zone still works unchanged. */
+  function splitZones(raw: string | undefined): string[] {
+    const cell = (raw ?? "").trim();
+    if (cell.length === 0) return [];
+    let parts = [cell];
+    for (const sep of ["|", ";", "/"]) parts = parts.flatMap((x) => x.split(sep));
+    return parts.map((x) => x.trim()).filter((x) => x.length > 0);
+  }
+
   function downloadSample() {
     if (type === "survey") {
       downloadCsv("survey_persons_sample.csv", [
         ["full_name", "email", "password", "cnic", "phone", "zone"],
-        ["New Surveyor", "surveyor@example.pk", "Password123", "3520255555551", "03005555555", exampleZone],
+        ["New Surveyor", "surveyor@example.pk", "Password123", "3520255555551", "03005555555",
+         zoneNames.slice(0, 2).join(" | ") || exampleZone],
       ]);
       return;
     }
@@ -116,7 +127,9 @@ export function ImportUsers({
         type === "survey"
           ? {
               p_email: r.email, p_password: r.password, p_full_name: r.full_name, p_role: "survey",
-              p_district: districtLocked, p_zone: r.zone, p_cnic: r.cnic, p_phone: r.phone,
+              p_district: districtLocked, p_zone: splitZones(r.zone)[0] ?? null,
+              p_zones: splitZones(r.zone),
+              p_cnic: r.cnic, p_phone: r.phone,
               p_shop_name: null, p_latitude: null, p_longitude: null,
             }
           : type === "shopkeeper"
@@ -174,6 +187,7 @@ export function ImportUsers({
               <li>The <code>zone</code> must be one of: {zoneNames.length ? zoneNames.join(", ") : "(no zones yet — ask the Super Admin)"}.</li>
             )}
             {type === "survey" && <li>Survey persons sign in, so each needs an <code>email</code> and <code>password</code> (8+ chars, letter + number).</li>}
+            {type === "survey" && <li>To give one person several zones, separate them with <code>|</code> — e.g. <code>Zone A | Zone B</code>.</li>}
             {type === "shopkeeper" && <li>Shopkeepers don&apos;t sign in, so no email or password is needed.</li>}
             <li>Upload the file below and press Import.</li>
           </ol>

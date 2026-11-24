@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Badge,
@@ -384,12 +384,15 @@ export function Analytics({
   lines,
   from,
   to,
+  zoneSub,
 }: {
   show: Kind[];
   /** Already filtered by the Dashboard — this component never filters. */
   lines: EffectiveLine[];
   from: string;
   to: string;
+  /** Shop-coverage line drawn under each zone on the zone charts. */
+  zoneSub?: (zone: string) => ReactNode;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [stats, setStats] = useState<SurveyorStat[] | null>(null);
@@ -436,7 +439,13 @@ export function Analytics({
         <RevealCard delay={120}>
           <ChartHead icon="📍" title={drill ? `Zones in ${drill}` : "Zones"} />
           {drill ? (
-            <GroupedBarChart groups={drillZones} series={SIZES} xLabel="Zone" />
+            <GroupedBarChart
+              groups={drillZones}
+              series={SIZES}
+              xLabel="Zone"
+              renderSubLabel={zoneSub}
+              hint="Under each zone: shops expecting flour / all shops — click to map them"
+            />
           ) : (
             <p className="py-10 text-center text-sm text-gray-400">
               Click a district on the left to compare its zones.
@@ -448,7 +457,13 @@ export function Analytics({
       {!showDistrict && show.includes("zone") && (
         <RevealCard delay={120}>
           <ChartHead icon="📍" title="By Zone" />
-          <GroupedBarChart groups={byZone} series={SIZES} xLabel="Zone" />
+          <GroupedBarChart
+            groups={byZone}
+            series={SIZES}
+            xLabel="Zone"
+            renderSubLabel={zoneSub}
+            hint="Under each zone: shops expecting flour / all shops — click to map them"
+          />
         </RevealCard>
       )}
 

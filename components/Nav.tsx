@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/components/ui";
-import { ROLE_LABEL, type Profile } from "@/lib/types";
+import { ROLE_LABEL, zoneList, type Profile } from "@/lib/types";
 
 export interface NavLink {
   href: string;
@@ -15,7 +15,8 @@ export function Nav({
   profile,
   links,
 }: {
-  profile: Pick<Profile, "full_name" | "role" | "district" | "zone">;
+  profile: Pick<Profile, "full_name" | "role" | "district" | "zone"> &
+    Pick<Partial<Profile>, "zones">;
   links: NavLink[];
 }) {
   const pathname = usePathname();
@@ -28,7 +29,10 @@ export function Nav({
     router.refresh();
   }
 
-  const scope = [profile.district, profile.zone].filter(Boolean).join(" · ");
+  // A survey person may cover several zones — show all of them.
+  const scope = [profile.district, zoneList(profile).join(", ") || null]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <header className="sticky top-0 z-20 border-b border-gray-200 bg-white">

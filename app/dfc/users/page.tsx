@@ -20,7 +20,7 @@ import { ConfirmDialog } from "@/components/Modal";
 import { UserForm, type District, type Zone } from "@/components/UserForm";
 import { ImportUsers } from "@/components/ImportUsers";
 import { downloadCsv, fmtDate } from "@/lib/format";
-import { ROLE_LABEL, type Profile } from "@/lib/types";
+import { ROLE_LABEL, zoneLabel, zoneList, type Profile } from "@/lib/types";
 
 export default function ManageUsersPage() {
   const supabase = useMemo(() => createClient(), []);
@@ -68,7 +68,7 @@ export default function ManageUsersPage() {
   const filtered = users.filter((u) => {
     if (!["flour_mill", "shopkeeper", "survey", "visitor"].includes(u.role)) return false;
     if (roleF !== "all" && u.role !== roleF) return false;
-    if (zoneF !== "all" && (u.zone ?? "") !== zoneF) return false;
+    if (zoneF !== "all" && !zoneList(u).includes(zoneF)) return false;
     if (q && !`${u.full_name} ${u.phone ?? ""} ${u.cnic ?? ""} ${u.shop_name ?? ""}`.toLowerCase().includes(q.toLowerCase()))
       return false;
     return true;
@@ -83,7 +83,7 @@ export default function ManageUsersPage() {
       ["Name", "Role", "District", "Zone", "Licence / CNIC", "Phone", "Shop name",
        "Address", "Latitude", "Longitude", "Map link", "Status", "Created", "Created by"],
       ...filtered.map((u) => [
-        u.full_name, ROLE_LABEL[u.role], u.district ?? "", u.zone ?? "", u.cnic ?? "",
+        u.full_name, ROLE_LABEL[u.role], u.district ?? "", zoneList(u).join(" | "), u.cnic ?? "",
         u.phone ?? "", u.shop_name ?? "", u.address ?? "",
         u.latitude ?? "", u.longitude ?? "", maps(u),
         u.is_active ? "Active" : "Inactive", fmtDate(u.created_at), u.created_by_name ?? "",
@@ -116,7 +116,7 @@ export default function ManageUsersPage() {
           <Field label="Zone">
             <Select value={zoneF} onChange={(e) => setZoneF(e.target.value)}>
               <option value="all">All zones</option>
-              {Array.from(new Set(users.map((u) => u.zone).filter(Boolean))).sort().map((z) => (
+              {Array.from(new Set(users.flatMap((u) => zoneList(u)))).sort().map((z) => (
                 <option key={z as string}>{z}</option>
               ))}
             </Select>
@@ -142,7 +142,7 @@ export default function ManageUsersPage() {
                   </Td>
                   <Td>{ROLE_LABEL[u.role]}</Td>
                   <Td>{u.district ?? "—"}</Td>
-                  <Td>{u.zone ?? "—"}</Td>
+                  <Td>{zoneLabel(u)}</Td>
                   <Td>{u.phone ?? "—"}</Td>
                   <Td className="text-gray-500">{u.cnic ?? "—"}</Td>
                   <Td>{u.is_active ? <Badge color="green">Active</Badge> : <Badge color="gray">Inactive</Badge>}</Td>

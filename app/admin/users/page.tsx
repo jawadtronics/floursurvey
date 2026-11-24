@@ -19,7 +19,7 @@ import {
 import { ConfirmDialog } from "@/components/Modal";
 import { UserForm, type District, type Zone } from "@/components/UserForm";
 import { fmtDate } from "@/lib/format";
-import { ROLE_LABEL, type Profile, type Role } from "@/lib/types";
+import { ROLE_LABEL, zoneLabel, type Profile, type Role } from "@/lib/types";
 
 const ALL_ROLES: Role[] = ["super_admin", "supervisor", "dfc", "flour_mill", "shopkeeper", "survey", "visitor"];
 
@@ -104,7 +104,7 @@ export default function AdminUsersPage() {
                   </Td>
                   <Td><Badge color={u.role === "super_admin" ? "blue" : u.role === "supervisor" ? "amber" : "gray"}>{ROLE_LABEL[u.role]}</Badge></Td>
                   <Td>{u.district ?? "—"}</Td>
-                  <Td>{u.zone ?? "—"}</Td>
+                  <Td>{zoneLabel(u)}</Td>
                   <Td>{u.phone ?? "—"}</Td>
                   <Td>{u.is_active ? <Badge color="green">Active</Badge> : <Badge color="gray">Inactive</Badge>}</Td>
                   <Td className="text-gray-500">{fmtDate(u.created_at)}</Td>

@@ -6,7 +6,7 @@ import { Alert, Button, Field, Input, Select } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { MapPicker } from "@/components/MapPicker";
 import { fmtDateTime } from "@/lib/format";
-import { ROLE_LABEL, type Profile, type ProfileNote, type Role } from "@/lib/types";
+import { ROLE_LABEL, zoneList, type Profile, type ProfileNote, type Role } from "@/lib/types";
 
 /** Zone / district transfer history for a survey person. */
 function TransferNotes({ profileId }: { profileId: string }) {
@@ -86,6 +86,10 @@ export function UserForm({
   const [confirm, setConfirm] = useState("");
   const [district, setDistrict] = useState(editing?.district ?? lockedDistrict ?? "");
   const [zone, setZone] = useState(editing?.zone ?? "");
+  // A survey person may cover several zones; shopkeepers still have exactly one.
+  const [zonesSel, setZonesSel] = useState<string[]>(
+    editing && editing.role === "survey" ? zoneList(editing) : []
+  );
   const [cnic, setCnic] = useState(editing?.cnic ?? "");
   const [phone, setPhone] = useState(editing?.phone ?? "");
   const [shopName, setShopName] = useState(editing?.shop_name ?? "");
@@ -104,6 +108,7 @@ export function UserForm({
   // Shopkeepers have no dashboard, so they get no sign-in credentials.
   const needsLogin = !isShop;
   const isField = role === "flour_mill" || role === "shopkeeper" || role === "survey";
+  const isSurvey = role === "survey";
   const needsZone = role === "shopkeeper" || role === "survey";
   const needsDistrict = isField || role === "dfc";
   // A DFC-created visitor is locked to the DFC's district; a super-admin visitor picks many.
@@ -127,7 +132,8 @@ export function UserForm({
       if (password !== confirm) return "Passwords do not match.";
     }
     if (needsDistrict && !effDistrict) return "District is required.";
-    if (needsZone && !zone) return "Zone is required.";
+    if (isSurvey && zonesSel.length === 0) return "Select at least one zone for the survey person.";
+    if (needsZone && !isSurvey && !zone) return "Zone is required.";
     if (isField) {
       if (isShop) {
         // Licence numbers are alphanumeric and vary in length.
@@ -159,7 +165,9 @@ export function UserForm({
     setSaving(true);
     const common = {
       p_district: needsDistrict ? effDistrict : null,
-      p_zone: needsZone ? zone : null,
+      // p_zone stays the first zone so the single-zone callers and columns
+      // elsewhere keep working; p_zones carries the full list.
+      p_zone: isSurvey ? (zonesSel[0] ?? null) : needsZone ? zone : null,
       p_cnic: isField ? cnic : null,
       p_phone: isField ? phone : null,
       p_shop_name: isShop ? shopName.trim() : null,
@@ -172,12 +180,15 @@ export function UserForm({
     // Only visitors carry this newer param, so create/edit of every other role
     // still matches the existing DB function signature.
     const visitorExtra = isVisitor ? { p_visitor_any_date: visitorAnyDate } : {};
+    // Likewise, only survey persons send the newer zone-list param.
+    const surveyExtra = isSurvey ? { p_zones: zonesSel } : {};
     if (isEdit) {
       const { error } = await supabase.rpc("admin_update_user", {
         p_id: editing!.id,
         p_full_name: fullName.trim(),
         ...common,
         ...visitorExtra,
+        ...surveyExtra,
       });
       setSaving(false);
       if (error) { setErr(error.message); return; }
@@ -189,6 +200,7 @@ export function UserForm({
         p_role: role,
         ...common,
         ...visitorExtra,
+        ...surveyExtra,
       });
       setSaving(false);
       if (error) { setErr(error.message); return; }
@@ -201,7 +213,7 @@ export function UserForm({
       <div className="space-y-4">
         {!isEdit && (
           <Field label="Role" required>
-            <Select value={role} onChange={(e) => { setRole(e.target.value as Role); setZone(""); }}>
+            <Select value={role} onChange={(e) => { setRole(e.target.value as Role); setZone(""); setZonesSel([]); }}>
               {allowedRoles.map((r) => (
                 <option key={r} value={r}>{ROLE_LABEL[r]}</option>
               ))}
@@ -246,13 +258,13 @@ export function UserForm({
               {lockedDistrict ? (
                 <Input value={lockedDistrict} disabled />
               ) : (
-                <Select value={district} onChange={(e) => { setDistrict(e.target.value); setZone(""); }}>
+                <Select value={district} onChange={(e) => { setDistrict(e.target.value); setZone(""); setZonesSel([]); }}>
                   <option value="">Select district…</option>
                   {districts.map((d) => <option key={d.id} value={d.name}>{d.name}</option>)}
                 </Select>
               )}
             </Field>
-            {needsZone && (
+            {needsZone && !isSurvey && (
               <Field label="Zone" required>
                 <Select value={zone} onChange={(e) => setZone(e.target.value)} disabled={!effDistrict}>
                   <option value="">Select zone…</option>
@@ -260,6 +272,52 @@ export function UserForm({
                 </Select>
               </Field>
             )}
+          </div>
+        )}
+
+        {isSurvey && (
+          <div>
+            <span className="mb-1 block text-sm font-medium text-gray-700">
+              Zones <span className="text-red-500">*</span>
+            </span>
+            {!effDistrict ? (
+              <p className="text-sm text-gray-400">Pick a district first.</p>
+            ) : zoneOptions.length === 0 ? (
+              <p className="text-sm text-gray-400">No zones in {effDistrict} yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {zoneOptions.map((z) => {
+                  const on = zonesSel.includes(z.name);
+                  return (
+                    <label
+                      key={z.id}
+                      className={
+                        "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-sm " +
+                        (on
+                          ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                          : "border-gray-300 bg-white text-gray-700")
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5"
+                        checked={on}
+                        onChange={(e) =>
+                          setZonesSel((prev) =>
+                            e.target.checked ? [...prev, z.name] : prev.filter((x) => x !== z.name)
+                          )
+                        }
+                      />
+                      {z.name}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              A survey person can cover several zones. They will see pending surveys, and be able
+              to submit them, for every shop in {zonesSel.length > 1 ? "all of these zones" : "the selected zone"}.
+            </p>
           </div>
         )}
 

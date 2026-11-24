@@ -52,6 +52,8 @@ export interface Profile {
   role: Role;
   district: string | null;
   zone: string | null;
+  /** Survey persons may cover several zones. zone is always zones[0]. */
+  zones?: string[] | null;
   cnic: string | null;
   phone: string | null;
   shop_name: string | null;
@@ -271,4 +273,18 @@ export function isSeriousVariance(received: number, declared: number): boolean {
   if (v > 5) return true;
   if (received > 0 && v / received > 0.1) return true;
   return false;
+}
+
+/** Every zone a profile covers. Survey persons may have several; others have
+ *  at most the single `zone`. Always safe on rows fetched before `zones`
+ *  existed, which carry only `zone`. */
+export function zoneList(p: { zone: string | null; zones?: string[] | null }): string[] {
+  if (p.zones && p.zones.length > 0) return p.zones;
+  return p.zone ? [p.zone] : [];
+}
+
+/** Comma-joined zone names for tables, exports and headers. */
+export function zoneLabel(p: { zone: string | null; zones?: string[] | null }): string {
+  const l = zoneList(p);
+  return l.length > 0 ? l.join(", ") : "—";
 }

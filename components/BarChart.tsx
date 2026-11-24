@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/components/ui";
 
 export interface Series {
@@ -45,6 +45,7 @@ export function GroupedBarChart({
   height = 210,
   emptyText = "No data yet.",
   hint,
+  renderSubLabel,
 }: {
   groups: BarGroup[];
   series: Series[];
@@ -58,6 +59,8 @@ export function GroupedBarChart({
   height?: number;
   emptyText?: string;
   hint?: string;
+  /** Extra line drawn under each group's X-axis label (e.g. shop coverage). */
+  renderSubLabel?: (groupName: string) => ReactNode;
 }) {
   const [on, setOn] = useState(false);
   const [hover, setHover] = useState<{ g: string; s: string; v: number } | null>(null);
@@ -192,6 +195,7 @@ export function GroupedBarChart({
                 >
                   {g.name}
                 </span>
+                {renderSubLabel && renderSubLabel(g.name)}
               </div>
             ))}
           </div>

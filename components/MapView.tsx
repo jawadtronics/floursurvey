@@ -18,6 +18,8 @@ export interface MapPin {
   lng: number;
   title: string;
   subtitle?: string;
+  /** CSS colour for a round marker. Omit for the default Leaflet pin. */
+  color?: string;
 }
 
 /** Read-only map of pins with a "Get directions" hand-off per pin. */
@@ -45,10 +47,22 @@ export function MapView({
       mapRef.current = map;
 
       const icon = L.icon(ICON);
+      // A coloured pin becomes a plain circle so several states (e.g. shops
+      // that are expecting flour vs shops that are not) read at a glance.
+      const dot = (color: string) =>
+        L.divIcon({
+          className: "",
+          html:
+            '<span style="display:block;width:14px;height:14px;border-radius:9999px;' +
+            "background:" + color + ";border:2px solid #fff;" +
+            'box-shadow:0 0 0 1px rgba(0,0,0,.35)"></span>',
+          iconSize: [14, 14],
+          iconAnchor: [7, 7],
+        });
       const valid = pins.filter((p) => p.lat != null && p.lng != null);
       const latlngs: [number, number][] = [];
       for (const p of valid) {
-        const m = L.marker([p.lat, p.lng], { icon }).addTo(map);
+        const m = L.marker([p.lat, p.lng], { icon: p.color ? dot(p.color) : icon }).addTo(map);
         const dir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
         m.bindPopup(
           `<div style="min-width:150px">
@@ -69,7 +83,7 @@ export function MapView({
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(pins.map((p) => p.id))]);
+  }, [JSON.stringify(pins.map((p) => [p.id, p.color, p.lat, p.lng]))]);
 
   return (
     <div

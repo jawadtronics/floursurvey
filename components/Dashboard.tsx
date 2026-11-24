@@ -8,6 +8,12 @@ import { Analytics, type AnalyticsKind } from "@/components/analytics";
 import { BagBreakdown } from "@/components/BagBreakdown";
 import { MillFlourChart } from "@/components/MillFlourChart";
 import {
+  ZoneShopMap,
+  expectedShopIdsInWindow,
+  karachiToday,
+  type ZoneShop,
+} from "@/components/ZoneShopMap";
+import {
   EMPTY_FILTERS,
   describeFilters,
   filterAdvances,
@@ -29,20 +35,35 @@ export function Dashboard({ show }: { show: AnalyticsKind[] }) {
   const [lines, setLines] = useState<EffectiveLine[] | null>(null);
   const [surveys, setSurveys] = useState<SurveyRow[]>([]);
   const [advances, setAdvances] = useState<AdvanceRow[]>([]);
+  const [shops, setShops] = useState<ZoneShop[]>([]);
   const [f, setF] = useState<DashFilters>(EMPTY_FILTERS);
+  const [mapZone, setMapZone] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       // fetchAll pages past PostgREST's 1000-row cap; a plain select() here
       // silently truncated the data and made the charts disagree.
-      const [a, b, c] = await Promise.all([
+      const [a, b, c, d] = await Promise.all([
         fetchAll<EffectiveLine>(supabase, "v_issue_lines_effective", ["id"]),
         fetchAll<SurveyRow>(supabase, "v_surveys_visible", ["id"]),
         fetchAll<AdvanceRow>(supabase, "v_advances", ["advance_id", "shopkeeper_id"]),
+        // Every shop, so the zone coverage count includes shops that have
+        // never had a delivery.
+        fetchAll<ZoneShop & { role: string; is_active: boolean }>(
+          supabase,
+          "v_users",
+          ["id"],
+          "id, full_name, shop_name, zone, district, address, phone, latitude, longitude, role, is_active"
+        ),
       ]);
       setLines(a);
       setSurveys(b);
       setAdvances(c);
+      setShops(
+        d.filter(
+          (u) => u.role === "shopkeeper" && u.is_active
+        )
+      );
     })();
   }, [supabase]);
 
@@ -69,6 +90,38 @@ export function Dashboard({ show }: { show: AnalyticsKind[] }) {
   const millShopIds = new Set(fLines.map((l) => l.shopkeeper_id));
   const fSurveys = filterSurveys(surveys, f, zoneDistrict, millShopIds);
   const fAdvances = filterAdvances(advances, f);
+
+  // ---- zone shop coverage -------------------------------------------------
+  // Under each zone on the chart: how many of that zone's shops have an
+  // expected-flour commitment in the active window, out of all its shops.
+  const shopsByZone = new Map<string, ZoneShop[]>();
+  for (const s of shops) {
+    if (!s.zone) continue;
+    if (f.district !== "all" && s.district !== f.district) continue;
+    const list = shopsByZone.get(s.zone) ?? [];
+    list.push(s);
+    shopsByZone.set(s.zone, list);
+  }
+
+  const zoneSub = (zone: string) => {
+    const all = shopsByZone.get(zone) ?? [];
+    // Advances are matched on the dashboard's own date window so this count
+    // never contradicts the bars above it.
+    const exp = expectedShopIdsInWindow(fAdvances, zone, f.from, f.to);
+    const committed = all.filter((s) => exp.has(s.id)).length;
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setMapZone(zone);
+        }}
+        title={`Show the ${all.length} shop${all.length === 1 ? "" : "s"} in ${zone} on a map`}
+        className="mt-0.5 block w-full truncate text-[11px] font-medium text-emerald-700 hover:underline"
+      >
+        {committed} / {all.length} shops 🗺
+      </button>
+    );
+  };
 
   const set = (patch: Partial<DashFilters>) => setF((p) => ({ ...p, ...patch }));
 
@@ -119,7 +172,7 @@ export function Dashboard({ show }: { show: AnalyticsKind[] }) {
       </Card>
 
       <div className="mb-6">
-        <Analytics show={show} lines={fLines} from={f.from} to={f.to} />
+        <Analytics show={show} lines={fLines} from={f.from} to={f.to} zoneSub={zoneSub} />
       </div>
 
       <div className="mb-6">
@@ -129,6 +182,16 @@ export function Dashboard({ show }: { show: AnalyticsKind[] }) {
       <div className="mb-6">
         <MillFlourChart filters={f} />
       </div>
+
+      {mapZone && (
+        <ZoneShopMap
+          zone={mapZone}
+          shops={shopsByZone.get(mapZone) ?? []}
+          advances={advances}
+          initialDate={f.to || f.from || karachiToday()}
+          onClose={() => setMapZone(null)}
+        />
+      )}
     </div>
   );
 }
