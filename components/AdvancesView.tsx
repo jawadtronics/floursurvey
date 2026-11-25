@@ -19,6 +19,7 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { GroupedBarChart, type BarGroup } from "@/components/BarChart";
+import { ZoneShopMap, type ZoneShop } from "@/components/ZoneShopMap";
 import { fetchAll } from "@/lib/fetchAll";
 import { downloadCsv, fmtDate } from "@/lib/format";
 import type { AdvanceRow } from "@/lib/types";
@@ -38,10 +39,11 @@ const ZONE_SERIES = [
  * Zone-wise Assigned vs Issued vs Variance across the advances, with its own
  * zone + date-range filters (independent of the table below).
  */
-function ZoneSummary({ rows }: { rows: AdvanceRow[] }) {
+function ZoneSummary({ rows, shops }: { rows: AdvanceRow[]; shops: ZoneShop[] }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [zone, setZone] = useState("all");
+  const [mapZone, setMapZone] = useState<string | null>(null);
 
   const zones = Array.from(new Set(rows.map((r) => r.zone).filter(Boolean))).sort() as string[];
 
@@ -65,6 +67,44 @@ function ZoneSummary({ rows }: { rows: AdvanceRow[] }) {
   for (const g of map.values()) g.values.variance = Math.abs(g.values.issued - g.values.assigned);
 
   const groups = Array.from(map.values()).sort((a, b) => b.values.assigned - a.values.assigned);
+
+  // ---- shop coverage under each zone -------------------------------------
+  // Every shop in the zone, so the total counts shops that have never had an
+  // advance, not just the ones appearing in the bars.
+  const shopsByZone = new Map<string, ZoneShop[]>();
+  for (const sk of shops) {
+    if (!sk.zone) continue;
+    const list = shopsByZone.get(sk.zone) ?? [];
+    list.push(sk);
+    shopsByZone.set(sk.zone, list);
+  }
+  // Which shops are expecting flour, taken from the SAME scoped rows that
+  // drive the bars, so the count can never contradict the chart above it.
+  const expectedByZone = new Map<string, Set<string>>();
+  for (const r of scoped) {
+    if (!r.zone || r.total_bags <= 0) continue;
+    const set = expectedByZone.get(r.zone) ?? new Set<string>();
+    set.add(r.shopkeeper_id);
+    expectedByZone.set(r.zone, set);
+  }
+
+  const zoneSub = (z: string) => {
+    const all = shopsByZone.get(z) ?? [];
+    const exp = expectedByZone.get(z) ?? new Set<string>();
+    const committed = all.filter((sk) => exp.has(sk.id)).length;
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setMapZone(z);
+        }}
+        title={`Show the ${all.length} shop${all.length === 1 ? "" : "s"} in ${z} on a map`}
+        className="mt-0.5 block w-full truncate text-[11px] font-medium text-emerald-700 hover:underline"
+      >
+        {committed} / {all.length} shops 🗺
+      </button>
+    );
+  };
   const tAssigned = groups.reduce((a, g) => a + g.values.assigned, 0);
   const tIssued = groups.reduce((a, g) => a + g.values.issued, 0);
   const tVar = tIssued - tAssigned;
@@ -92,7 +132,15 @@ function ZoneSummary({ rows }: { rows: AdvanceRow[] }) {
         <EmptyState>No advances match these filters.</EmptyState>
       ) : (
         <>
-          <GroupedBarChart groups={groups} series={ZONE_SERIES} xLabel="Zone" yLabel="Bags" height={230} />
+          <GroupedBarChart
+            groups={groups}
+            series={ZONE_SERIES}
+            xLabel="Zone"
+            yLabel="Bags"
+            height={230}
+            renderSubLabel={zoneSub}
+            hint="Under each zone: shops expecting flour / all shops — click to map them"
+          />
           <div className="mt-3 flex flex-wrap justify-center gap-4 text-xs text-gray-500">
             <span>Total Assigned <strong className="text-gray-800">{tAssigned.toLocaleString()}</strong></span>
             <span>Total Issued <strong className="text-gray-800">{tIssued.toLocaleString()}</strong></span>
@@ -104,6 +152,18 @@ function ZoneSummary({ rows }: { rows: AdvanceRow[] }) {
             </span>
           </div>
         </>
+      )}
+
+      {mapZone && (
+        <ZoneShopMap
+          zone={mapZone}
+          shops={shopsByZone.get(mapZone) ?? []}
+          /* the full, unfiltered advances so the map's own date picker can
+             reach any day regardless of this chart's range */
+          advances={rows}
+          initialDate={to || from || todayKarachi()}
+          onClose={() => setMapZone(null)}
+        />
       )}
     </Card>
   );
@@ -122,6 +182,7 @@ export function AdvancesView({
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [rows, setRows] = useState<AdvanceRow[] | null>(null);
+  const [shops, setShops] = useState<ZoneShop[]>([]);
   const [date, setDate] = useState(todayKarachi()); // pre-filtered to today
   const dateLocked = visitor && !canAnyDate;
   const [mill, setMill] = useState("all");
@@ -134,7 +195,18 @@ export function AdvancesView({
     const all = await fetchAll<AdvanceRow>(supabase, "v_advances", ["advance_id", "shopkeeper_id"]);
     all.sort((x, y) => (x.supply_date < y.supply_date ? 1 : x.supply_date > y.supply_date ? -1 : 0));
     setRows(all);
-  }, [supabase]);
+
+    // Only the zone summary needs the shop list, and visitors never see it.
+    if (!visitor) {
+      const users = await fetchAll<ZoneShop & { role: string; is_active: boolean }>(
+        supabase,
+        "v_users",
+        ["id"],
+        "id, full_name, shop_name, zone, district, address, phone, latitude, longitude, role, is_active"
+      );
+      setShops(users.filter((u) => u.role === "shopkeeper" && u.is_active));
+    }
+  }, [supabase, visitor]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -193,7 +265,7 @@ export function AdvancesView({
     <div>
       {banner && <div className="mb-4"><Alert tone={banner.tone}>{banner.msg}</Alert></div>}
 
-      {!visitor && <ZoneSummary rows={rows} />}
+      {!visitor && <ZoneSummary rows={rows} shops={shops} />}
 
       <Card className="mb-4 p-4">
         <div className="grid gap-3 sm:grid-cols-3">
